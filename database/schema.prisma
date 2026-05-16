@@ -1,0 +1,371 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  PRINCIPAL
+  DEPUTY_PRINCIPAL
+  DIRECTOR_OF_STUDIES
+  TEACHER
+  CLASS_TEACHER
+  DORMITORY_MASTER
+  ACCOUNTANT
+  STUDENT
+  PARENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum CBCLevel {
+  EE1
+  EE2
+  ME1
+  ME2
+  AE1
+  AE2
+  BE1
+  BE2
+}
+
+enum Term {
+  TERM_1
+  TERM_2
+  TERM_3
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum Pathway {
+  STEM
+  ARTS_SPORTS_SCIENCE
+  SOCIAL_SCIENCES
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  role          Role      @default(STUDENT)
+  firstName     String
+  lastName      String
+  phoneNumber   String?
+  profileImage  String?
+  isActive      Boolean   @default(true)
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  student       Student?
+  staff         Staff?
+  parent        Parent?
+  
+  auditLogs     AuditLog[]
+  notifications Notification[]
+}
+
+model Student {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  admissionNumber   String    @unique
+  upiNumber         String?   @unique
+  dateOfBirth       DateTime
+  admissionDate     DateTime  @default(now())
+  currentGrade      Int       // 10, 11, 12
+  pathway           Pathway?
+  
+  classId           String?
+  class             Class?    @relation(fields: [classId], references: [id])
+  
+  dormId            String?
+  dorm              Dormitory? @relation(fields: [dormId], references: [id])
+  bedNumber         String?
+
+  parentId          String?
+  parent            Parent?   @relation(fields: [parentId], references: [id])
+
+  assessments       CompetencyAssessment[]
+  examResults       ExamResult[]
+  attendance        Attendance[]
+  invoices          Invoice[]
+  payments          Payment[]
+  clubMemberships   ClubMembership[]
+  disciplineRecords DisciplineRecord[]
+}
+
+model Staff {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  staffNumber       String    @unique
+  tscNumber         String?   @unique
+  designation       String
+  department        String?
+  
+  subjects          Subject[]
+  classes           Class[]   @relation("ClassTeacher")
+  dorms             Dormitory[] @relation("DormMaster")
+}
+
+model Parent {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  occupation        String?
+  address           String?
+  
+  students          Student[]
+}
+
+model Class {
+  id                String    @id @default(uuid())
+  grade             Int       // 10, 11, 12
+  stream            String    // e.g., "A", "B", "Blue", "Red"
+  capacity          Int       @default(45)
+  
+  classTeacherId    String?
+  classTeacher      Staff?    @relation("ClassTeacher", fields: [classTeacherId], references: [id])
+  
+  students          Student[]
+  timetable         TimetableEntry[]
+
+  @@unique([grade, stream])
+}
+
+model Subject {
+  id                String    @id @default(uuid())
+  name              String
+  code              String    @unique
+  isCompulsory      Boolean   @default(false)
+  pathway           Pathway?
+  
+  teachers          Staff[]
+  assessments       CompetencyAssessment[]
+  examResults       ExamResult[]
+}
+
+model CompetencyAssessment {
+  id                String    @id @default(uuid())
+  studentId         String
+  student           Student   @relation(fields: [studentId], references: [id])
+  subjectId         String
+  subject           Subject   @relation(fields: [subjectId], references: [id])
+  learningArea      String
+  competency        String
+  score             CBCLevel
+  remarks           String?
+  term              Term
+  year              Int
+  date              DateTime  @default(now())
+
+  @@index([studentId, subjectId])
+}
+
+model Exam {
+  id                String    @id @default(uuid())
+  name              String    // e.g., "Mid-Term 1 2024"
+  term              Term
+  year              Int
+  startDate         DateTime
+  endDate           DateTime
+  isPublished       Boolean   @default(false)
+  
+  results           ExamResult[]
+}
+
+model ExamResult {
+  id                String    @id @default(now()) // Should be uuid, but for now
+  id_uuid           String    @id @default(uuid())
+  examId            String
+  exam              Exam      @relation(fields: [examId], references: [id])
+  studentId         String
+  student           Student   @relation(fields: [studentId], references: [id])
+  subjectId         String
+  subject           Subject   @relation(fields: [subjectId], references: [id])
+  marks             Float
+  grade             String?   // A, B, C...
+  remarks           String?
+  
+  @@unique([examId, studentId, subjectId])
+}
+
+model Finance {
+  id                String    @id @default(uuid())
+  // This could be a configuration table
+}
+
+model FeeStructure {
+  id                String    @id @default(uuid())
+  grade             Int
+  term              Term
+  year              Int
+  totalAmount       Float
+  breakdown         Json      // { "tuition": 20000, "boarding": 30000, ... }
+  
+  invoices          Invoice[]
+
+  @@unique([grade, term, year])
+}
+
+model Invoice {
+  id                String    @id @default(uuid())
+  studentId         String
+  student           Student   @relation(fields: [studentId], references: [id])
+  feeStructureId    String
+  feeStructure      FeeStructure @relation(fields: [feeStructureId], references: [id])
+  amount            Float
+  paidAmount        Float     @default(0)
+  balance           Float
+  dueDate           DateTime
+  status            PaymentStatus @default(PENDING)
+  createdAt         DateTime  @default(now())
+  
+  payments          Payment[]
+}
+
+model Payment {
+  id                String    @id @default(uuid())
+  invoiceId         String
+  invoice           Invoice   @relation(fields: [invoiceId], references: [id])
+  studentId         String
+  student           Student   @relation(fields: [studentId], references: [id])
+  amount            Float
+  method            String    // MPESA, BANK_TRANSFER, CASH
+  transactionId     String    @unique
+  status            PaymentStatus @default(COMPLETED)
+  date              DateTime  @default(now())
+  phoneNumber       String?   // For M-Pesa
+  receiptNumber     String?   @unique
+  bankName          String?   // For Bank Payments
+  bankBranch        String?   // For Bank Payments
+  bankSlipUrl       String?   // URL to the uploaded slip image
+}
+
+model Dormitory {
+  id                String    @id @default(uuid())
+  name              String    @unique
+  capacity          Int
+  
+  dormMasterId      String?
+  dormMaster        Staff?    @relation("DormMaster", fields: [dormMasterId], references: [id])
+  
+  students          Student[]
+}
+
+model Attendance {
+  id                String    @id @default(uuid())
+  studentId         String
+  student           Student   @relation(fields: [studentId], references: [id])
+  date              DateTime  @default(now())
+  isPresent         Boolean   @default(true)
+  remarks           String?
+  type              String    @default("CLASS") // CLASS, DORM, DINING
+}
+
+model Club {
+  id                String    @id @default(uuid())
+  name              String    @unique
+  description       String?
+  patron            String?
+  
+  members           ClubMembership[]
+}
+
+model ClubMembership {
+  id                String    @id @default(uuid())
+  clubId            String
+  club              Club      @relation(fields: [clubId], references: [id])
+  studentId         String
+  student           Student   @relation(fields: [studentId], references: [id])
+  joinedAt          DateTime  @default(now())
+  role              String    @default("MEMBER")
+}
+
+model NewsPost {
+  id                String    @id @default(uuid())
+  title             String
+  slug              String    @unique
+  content           String
+  excerpt           String?
+  featuredImage     String?
+  category          String?
+  isPublished       Boolean   @default(false)
+  author            String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Gallery {
+  id                String    @id @default(uuid())
+  title             String
+  imageUrl          String
+  category          String?
+  createdAt         DateTime  @default(now())
+}
+
+model Download {
+  id                String    @id @default(uuid())
+  title             String
+  fileUrl           String
+  category          String?   // ADMISSION, FEES, ACADEMIC
+  createdAt         DateTime  @default(now())
+}
+
+model TimetableEntry {
+  id                String    @id @default(uuid())
+  classId           String
+  class             Class     @relation(fields: [classId], references: [id])
+  dayOfWeek         Int       // 1-7
+  startTime         String    // "08:00"
+  endTime           String    // "08:40"
+  subject           String
+  teacher           String?
+}
+
+model AuditLog {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  action            String
+  details           String?
+  ipAddress         String?
+  createdAt         DateTime  @default(now())
+}
+
+model Notification {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  title             String
+  message           String
+  isRead            Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+}
+
+model DisciplineRecord {
+  id                String    @id @default(uuid())
+  studentId         String
+  student           Student   @relation(fields: [studentId], references: [id])
+  incidentDate      DateTime  @default(now())
+  description       String
+  actionTaken       String?
+  severity          String    @default("LOW") // LOW, MEDIUM, HIGH
+  reportedBy        String?
+}

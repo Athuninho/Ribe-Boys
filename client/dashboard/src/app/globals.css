@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --primary: #003366;
+  --sidebar: #ffffff;
+  --card: rgba(255, 255, 255, 0.7);
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --primary: #38bdf8;
+  --sidebar: #0f172a;
+  --card: rgba(15, 23, 42, 0.7);
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.glass-card {
+  @apply backdrop-blur-xl border border-white/20 shadow-xl;
+  background: var(--card);
+}
+
+.sidebar-glass {
+  @apply backdrop-blur-lg border-r border-white/10;
+  background: var(--sidebar);
+}
